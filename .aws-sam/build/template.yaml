@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'poc-golang-appsync
+
+  Sample SAM Template for poc-golang-appsync
+
+  '
+Globals:
+  Function:
+    Timeout: 5
+    MemorySize: 128
+    LoggingConfig:
+      LogFormat: JSON
+Resources:
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: appsync.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+      - PolicyName: allow-access-to-lambda-from-appsync
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: lambda:invokeFunction
+            Resource:
+              Fn::GetAtt:
+              - GetUsersFunction
+              - Arn
+  AppSyncAPI:
+    Type: AWS::AppSync::GraphQLApi
+    Properties:
+      Name: MyGraphQLApi
+      AuthenticationType: API_KEY
+  AppSyncSchema:
+    Type: AWS::AppSync::GraphQLSchema
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncAPI
+        - ApiId
+      DefinitionS3Location: ../../cmd/graphql/schema.graphql
+  AppSyncDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncAPI
+        - ApiId
+      Name: handler
+      Type: AWS_LAMBDA
+      LambdaConfig:
+        LambdaFunctionArn:
+          Fn::GetAtt:
+          - GetUsersFunction
+          - Arn
+      ServiceRoleArn:
+        Fn::GetAtt:
+        - Role
+        - Arn
+  AppSyncResolverGetUsers:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncAPI
+        - ApiId
+      TypeName: Query
+      FieldName: getUsers
+      DataSourceName:
+        Fn::GetAtt:
+        - AppSyncDataSource
+        - Name
+      RequestMappingTemplate: '{ "version" : "2017-02-28", "operation": "Invoke",
+        "payload": $util.toJson($context.arguments) }'
+      ResponseMappingTemplate: $util.toJson($context.result)
+  GetUsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: TestAppSyncGetUsersFunction
+      CodeUri: GetUsersFunction
+      Handler: bootstrap
+      Runtime: go1.x
+      Architectures:
+      - x86_64
+    Metadata:
+      SamResourceId: GetUsersFunction
